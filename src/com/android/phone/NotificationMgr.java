@@ -84,6 +84,9 @@ public class NotificationMgr implements CallerInfoAsyncQuery.OnQueryCompleteList
     /** The singleton NotificationMgr instance. */
     private static NotificationMgr sInstance;
 
+    //lanpeng add 10:40
+    public static final String ACTION_ENDCALL_BUTTON = "android.intent.action.NOTIFICATION_END_CALL_BUTTON";
+
     private PhoneApp mApp;
     private Phone mPhone;
     private CallManager mCM;
@@ -816,6 +819,17 @@ public class NotificationMgr implements CallerInfoAsyncQuery.OnQueryCompleteList
         RemoteViews contentView = new RemoteViews(mContext.getPackageName(),
                                                    R.layout.ongoing_call_notification);
         contentView.setImageViewResource(R.id.icon, expandedViewIcon);
+
+        // lanpeng add 10:27,01/10/2012
+        
+        ComponentName rec = new ComponentName(mContext.getPackageName(), OutgoingCallNotifyReceiver.class.getName());
+        Intent endCallButtonIntent = new Intent(ACTION_ENDCALL_BUTTON);
+        endCallButtonIntent.setComponent(rec);
+        PendingIntent endCallPendingIntent = PendingIntent.getBroadcast(mContext,
+                1, endCallButtonIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        contentView.setOnClickPendingIntent(R.id.endCallButton, endCallPendingIntent);
+        
+        //lanpeng add end
 
         // if the connection is valid, then build what we need for the
         // first line of notification information, and start the chronometer.

@@ -906,6 +906,7 @@ public class CallNotifier extends Handler
         // Release the ToneGenerator used for playing SignalInfo and CallWaiting
         if (mSignalInfoToneGenerator != null) {
             mSignalInfoToneGenerator.release();
+            mSignalInfoToneGenerator = null;
         }
 
         // Clear ringback tone player
@@ -1698,6 +1699,23 @@ public class CallNotifier extends Handler
 
                 //Start playing the new tone if its a valid tone
                 mSignalInfoToneGenerator.startTone(mToneId);
+            }else {
+            	log("LP mark to make an new Instanse of mSignalInfoToneGenerator");
+            	try {
+                    mSignalInfoToneGenerator = new ToneGenerator(AudioManager.STREAM_VOICE_CALL,
+                            TONE_RELATIVE_VOLUME_SIGNALINFO);
+                    
+                  //First stop any ongoing SignalInfo tone
+                    mSignalInfoToneGenerator.stopTone();
+
+                    //Start playing the new tone if its a valid tone
+                    mSignalInfoToneGenerator.startTone(mToneId);
+                    
+                } catch (RuntimeException e) {
+                    Log.w(LOG_TAG, "CallNotifier: Exception caught while creating " +
+                            "mSignalInfoToneGenerator: " + e);
+                    mSignalInfoToneGenerator = null;
+                }
             }
         }
     }

@@ -233,6 +233,12 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name="com.android.phone.OutgoingCallNotifyReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.NOTIFICATION_END_CALL_BUTTON" />
+            </intent-filter>
+        </receiver>
+
         <!-- Main in-call UI activity.  This is never launched directly
              from outside the phone app; instead, it's either launched by
              the OutgoingCallBroadcaster (for outgoing calls), or as the

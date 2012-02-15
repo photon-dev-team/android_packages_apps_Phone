@@ -192,6 +192,11 @@
         <item name="android:background">?android:attr/selectableItemBackground</item>
     </style>
 
+    <!-- "Notification End" button; similar to InCallButton. Lp add -->
+    <style name="NotificationEndButton">
+        <item name="android:background">?android:attr/selectableItemBackground</item>
+    </style>
+
     <!-- Text label drawn alongside buttons in the "extra button row" of
          the in-call onscreen touch UI. -->
     <style name="InCallExtraRowButtonLabel">
