@@ -55,7 +55,6 @@
     android:orientation="vertical"
     android:paddingLeft="8dp"
     android:paddingRight="8dp"
-    android:layout_weight="1"
     >
     <TextView android:id="@+id/title"
         android:textAppearance="@android:style/TextAppearance.StatusBar.EventContent.Title"
@@ -122,14 +121,5 @@
         style="?android:attr/progressBarStyleHorizontal"
         />
 </LinearLayout> <!-- end of status_bar_latest_event_content_large_icon.xml -->
-
-    <!-- lp added to end the call -->
-    <ImageButton android:id="@+id/endCallButton"
-    	style="@style/NotificationEndButton"
-	    android:layout_width="@android:dimen/notification_large_icon_width"
-        android:layout_height="@android:dimen/notification_large_icon_width"
-        android:scaleType="center"
-        android:src="@drawable/ic_end_call"
-        android:contentDescription="@string/onscreenEndCallText" />
 
 </LinearLayout> <!-- end of status_bar_latest_event_content.xml -->

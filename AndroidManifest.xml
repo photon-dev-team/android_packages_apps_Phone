@@ -233,12 +233,6 @@
             </intent-filter>
         </receiver>
 
-        <receiver android:name="com.android.phone.OutgoingCallNotifyReceiver">
-            <intent-filter>
-                <action android:name="android.intent.action.NOTIFICATION_END_CALL_BUTTON" />
-            </intent-filter>
-        </receiver>
-
         <!-- Main in-call UI activity.  This is never launched directly
              from outside the phone app; instead, it's either launched by
              the OutgoingCallBroadcaster (for outgoing calls), or as the
@@ -480,7 +474,6 @@
 
         <activity android:label="Sip Settings"
                   android:name=".sip.SipSettings"
-                  android:theme="@android:style/Theme.Holo.DialogWhenLarge"
                   android:launchMode="singleTop"
                   android:configChanges="orientation|screenSize|keyboardHidden"
                   android:uiOptions="splitActionBarWhenNarrow">
@@ -490,7 +483,6 @@
             </intent-filter>
         </activity>
         <activity android:name=".sip.SipEditor"
-                android:theme="@android:style/Theme.Holo.DialogWhenLarge"
                 android:configChanges="orientation|screenSize|keyboardHidden"
                 android:uiOptions="splitActionBarWhenNarrow">
         </activity>
