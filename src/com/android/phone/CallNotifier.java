@@ -38,6 +38,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.SystemProperties;
+import android.os.SystemClock;
 import android.os.Vibrator;
 import android.provider.CallLog.Calls;
 import android.provider.Settings;
@@ -176,6 +177,9 @@ public class CallNotifier extends Handler
 
     // Cached AudioManager
     private AudioManager mAudioManager;
+
+    // Outgoing call aswered vibrator
+    private Vibrator mOutgoingCallVibrator = null;
 
     /**
      * Initialize the singleton CallNotifier instance.
@@ -799,6 +803,27 @@ public class CallNotifier extends Handler
             }
 
             if (VDBG) log("onPhoneStateChanged: OFF HOOK");
+
+            Call call = PhoneUtils.getCurrentCall(fgPhone);
+            Connection c = PhoneUtils.getConnection(fgPhone, call);
+            Call.State cstate = call.getState();
+            if (cstate == Call.State.ACTIVE && !c.isIncoming()) {
+                long callDurationMsec = c.getDurationMillis();
+                boolean vibrateOutgoing = (0 != Settings.System.getInt(
+                            mApplication.getContentResolver(),
+                            Constants.PREF_VIBRATE_OUTGOING, 0));
+                if (vibrateOutgoing && callDurationMsec < 200) {
+                    if (null == mOutgoingCallVibrator)
+                    {
+                        mOutgoingCallVibrator = new Vibrator();
+                    }
+                    if (null != mOutgoingCallVibrator) {
+                        mOutgoingCallVibrator.vibrate(
+                                    new long[] {0, 100, 100, 50, 50}, -1);
+                    }
+                }
+            }
+
             // make sure audio is in in-call mode now
             PhoneUtils.setAudioMode(mCM);
 

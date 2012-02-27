@@ -458,6 +458,8 @@
     <string name="sim_unlock_dismiss_text" msgid="8292343981739813597">"無効"</string>
     <string name="sim_unlock_unlock_text" msgid="6328406783399256930">"ロック解除"</string>
     <string name="sim_unlock_status_text" msgid="1919609683384607179">"PINを認証中..."</string>
+    <string name="vibrate_outgoing">応答時に振動</string>
+    <string name="vibrate_outgoing_sum">相手が呼び出しに応答した時にバイブレーションする</string>
     <string name="voicemail_settings_number_label" msgid="8524164258691887790">"ボイスメールの番号"</string>
     <string name="card_title_dialing" msgid="5769417478498348054">"発信中"</string>
     <string name="card_title_redialing" msgid="4831412164303596395">"再試行中"</string>
