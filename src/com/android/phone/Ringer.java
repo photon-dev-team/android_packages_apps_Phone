@@ -30,6 +30,7 @@ import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Vibrator;
+import android.provider.Settings;
 import android.util.Log;
 
 import com.android.internal.telephony.Phone;
@@ -37,308 +38,437 @@ import com.android.internal.telephony.Phone;
  * Ringer manager for the Phone app.
  */
 public class Ringer {
-    private static final String LOG_TAG = "Ringer";
-    private static final boolean DBG =
-            (PhoneApp.DBG_LEVEL >= 1) && (SystemProperties.getInt("ro.debuggable", 0) == 1);
+	private static final String LOG_TAG = "Ringer";
+	private static final boolean DBG = 
+			(PhoneApp.DBG_LEVEL >= 1) && (SystemProperties.getInt("ro.debuggable", 0) == 1);
 
-    private static final int PLAY_RING_ONCE = 1;
-    private static final int STOP_RING = 3;
+	/** The singleton instance. */
+	private static Ringer sInstance;
+	private RingHandler mRingHandler;
 
-    private static final int VIBRATE_LENGTH = 1000; // ms
-    private static final int PAUSE_LENGTH = 1000; // ms
+	// These two are used from both threads
+	private IPowerManager mPowerManager;
+	private Context mContext;
 
-    /** The singleton instance. */
-    private static Ringer sInstance;
-
-    // Uri for the ringtone.
-    Uri mCustomRingtoneUri;
-
-    Ringtone mRingtone;
-    Vibrator mVibrator = new Vibrator();
-    IPowerManager mPowerManager;
-    volatile boolean mContinueVibrating;
-    VibratorThread mVibratorThread;
-    Context mContext;
-    private Worker mRingThread;
-    private Handler mRingHandler;
-    private long mFirstRingEventTime = -1;
-    private long mFirstRingStartTime = -1;
-
-    /**
-     * Initialize the singleton Ringer instance.
-     * This is only done once, at startup, from PhoneApp.onCreate().
-     */
-    /* package */ static Ringer init(Context context) {
-        synchronized (Ringer.class) {
-            if (sInstance == null) {
-                sInstance = new Ringer(context);
-            } else {
-                Log.wtf(LOG_TAG, "init() called multiple times!  sInstance = " + sInstance);
-            }
-            return sInstance;
-        }
-    }
-
-    /** Private constructor; @see init() */
-    private Ringer(Context context) {
-        mContext = context;
-        mPowerManager = IPowerManager.Stub.asInterface(ServiceManager.getService(Context.POWER_SERVICE));
-    }
-
-    /**
-     * After a radio technology change, e.g. from CDMA to GSM or vice versa,
-     * the Context of the Ringer has to be updated. This is done by that function.
-     *
-     * @parameter Phone, the new active phone for the appropriate radio
-     * technology
-     */
-    void updateRingerContextAfterRadioTechnologyChange(Phone phone) {
-        if(DBG) Log.d(LOG_TAG, "updateRingerContextAfterRadioTechnologyChange...");
-        mContext = phone.getContext();
-    }
-
-    /**
-     * @return true if we're playing a ringtone and/or vibrating
-     *     to indicate that there's an incoming call.
-     *     ("Ringing" here is used in the general sense.  If you literally
-     *     need to know if we're playing a ringtone or vibrating, use
-     *     isRingtonePlaying() or isVibrating() instead.)
-     *
-     * @see isVibrating
-     * @see isRingtonePlaying
-     */
-    boolean isRinging() {
-        synchronized (this) {
-            return (isRingtonePlaying() || isVibrating());
-        }
-    }
-
-    /**
-     * @return true if the ringtone is playing
-     * @see isVibrating
-     * @see isRinging
-     */
-    private boolean isRingtonePlaying() {
-        synchronized (this) {
-            return (mRingtone != null && mRingtone.isPlaying()) ||
-                    (mRingHandler != null && mRingHandler.hasMessages(PLAY_RING_ONCE));
-        }
-    }
-
-    /**
-     * @return true if we're vibrating in response to an incoming call
-     * @see isVibrating
-     * @see isRinging
-     */
-    private boolean isVibrating() {
-        synchronized (this) {
-            return (mVibratorThread != null);
-        }
-    }
-
-    /**
-     * Starts the ringtone and/or vibrator
-     */
-    void ring() {
-        if (DBG) log("ring()...");
-
-        synchronized (this) {
-            try {
-                if (PhoneApp.getInstance().showBluetoothIndication()) {
-                    mPowerManager.setAttentionLight(true, 0x000000ff);
-		} else {
-                    mPowerManager.setAttentionLight(true, 0x00ffffff);
+	/**
+	 * Initialize the singleton Ringer instance.
+	 * This is only done once, at startup, from PhoneApp.onCreate().
+	 */
+	static Ringer init(Context context) {
+		synchronized (Ringer.class) {
+			if (sInstance == null) {
+				sInstance = new Ringer(context);
+			} else {
+				Log.wtf(LOG_TAG, "init() called multiple times!  sInstance = " + sInstance);
+			}
+			return sInstance;
 		}
-            } catch (RemoteException ex) {
-                // the other end of this binder call is in the system process.
-            }
+	}
 
-            if (shouldVibrate() && mVibratorThread == null) {
-                mContinueVibrating = true;
-                mVibratorThread = new VibratorThread();
-                if (DBG) log("- starting vibrator...");
-                mVibratorThread.start();
-            }
-            AudioManager audioManager =
-                    (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
+	/** Private constructor; @see init() */
+	private Ringer(Context context) {
+		mContext = context;
+		mPowerManager = IPowerManager.Stub.asInterface(
+				ServiceManager.getService(Context.POWER_SERVICE));
+	}
 
-            if (audioManager.getStreamVolume(AudioManager.STREAM_RING) == 0) {
-                if (DBG) log("skipping ring because volume is zero");
-                return;
-            }
+	/**
+	 * After a radio technology change, e.g. from CDMA to GSM or vice versa,
+	 * the Context of the Ringer has to be updated. This is done by that function.
+	 *
+	 * @parameter Phone, the new active phone for the appropriate radio
+	 * technology
+	 */
+	void updateRingerContextAfterRadioTechnologyChange(Phone phone) {
+		if(DBG) Log.d(LOG_TAG, "updateRingerContextAfterRadioTechnologyChange...");
+		mContext = phone.getContext();
+	}
 
-            makeLooper();
-            if (mFirstRingEventTime < 0) {
-                mFirstRingEventTime = SystemClock.elapsedRealtime();
-                mRingHandler.sendEmptyMessage(PLAY_RING_ONCE);
-            } else {
-                // For repeat rings, figure out by how much to delay
-                // the ring so that it happens the correct amount of
-                // time after the previous ring
-                if (mFirstRingStartTime > 0) {
-                    // Delay subsequent rings by the delta between event
-                    // and play time of the first ring
-                    if (DBG) {
-                        log("delaying ring by " + (mFirstRingStartTime - mFirstRingEventTime));
-                    }
-                    mRingHandler.sendEmptyMessageDelayed(PLAY_RING_ONCE,
-                            mFirstRingStartTime - mFirstRingEventTime);
-                } else {
-                    // We've gotten two ring events so far, but the ring
-                    // still hasn't started. Reset the event time to the
-                    // time of this event to maintain correct spacing.
-                    mFirstRingEventTime = SystemClock.elapsedRealtime();
-                }
-            }
-        }
-    }
+	/**
+	 * Starts ringing if not yet started, or restarts if it is ringing.
+	 * Actual start can be delayed a bit.
+	 * Subsequent calls to startRing() are ignored until after stopRing().
+	 */
+	public void startRing(Uri ringtoneUri) {
+		if (DBG) log("startRing()...");
 
-    boolean shouldVibrate() {
-        AudioManager audioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
-        return audioManager.shouldVibrate(AudioManager.VIBRATE_TYPE_RINGER);
-    }
+		AudioManager audioMgr = (AudioManager)mContext.getSystemService(
+				Context.AUDIO_SERVICE);
+		
+		if (null == ringtoneUri) {
+			ringtoneUri = Settings.System.DEFAULT_RINGTONE_URI;
+		}
 
-    /**
-     * Stops the ringtone and/or vibrator if any of these are actually
-     * ringing/vibrating.
-     */
-    void stopRing() {
-        synchronized (this) {
-            if (DBG) log("stopRing()...");
+		int attentionLight = RingHandler.ATTN_LIGHT_INCOMING;
+		if (PhoneApp.getInstance().showBluetoothIndication()) {
+			attentionLight =RingHandler.ATTN_LIGHT_INCOMING_BT;
+		}
+		
+		StartRingMsg msg = new StartRingMsg(ringtoneUri, attentionLight,
+				(0 != audioMgr.getStreamVolume(AudioManager.STREAM_RING)),
+				(audioMgr.shouldVibrate(AudioManager.VIBRATE_TYPE_RINGER)));
 
-            try {
-                mPowerManager.setAttentionLight(false, 0x00000000);
-            } catch (RemoteException ex) {
-                // the other end of this binder call is in the system process.
-            }
+		getRingHandler().sendMessage(
+				getRingHandler().obtainMessage(RingHandler.MSG_START, msg));
+	}
 
-            if (mRingHandler != null) {
-                mRingHandler.removeCallbacksAndMessages(null);
-                Message msg = mRingHandler.obtainMessage(STOP_RING);
-                msg.obj = mRingtone;
-                mRingHandler.sendMessage(msg);
-                PhoneUtils.setAudioMode();
-                mRingThread = null;
-                mRingHandler = null;
-                mRingtone = null;
-                mFirstRingEventTime = -1;
-                mFirstRingStartTime = -1;
-            } else {
-                if (DBG) log("- stopRing: null mRingHandler!");
-            }
+	/**
+	 * Stops the ringtone and/or vibrator if any of these are actually
+	 * ringing/vibrating.
+	 */
+	public void stopRing() {
+		if (DBG) log("stopRing()...");
 
-            if (mVibratorThread != null) {
-                if (DBG) log("- stopRing: cleaning up vibrator thread...");
-                mContinueVibrating = false;
-                mVibratorThread = null;
-            }
-            // Also immediately cancel any vibration in progress.
-            mVibrator.cancel();
-        }
-    }
+		getRingHandler().removeCallbacksAndMessages(null);
+		getRingHandler().sendMessageAtFrontOfQueue(
+				getRingHandler().obtainMessage(RingHandler.MSG_STOP));
+	}
 
-    private class VibratorThread extends Thread {
-        public void run() {
-            while (mContinueVibrating) {
-                mVibrator.vibrate(VIBRATE_LENGTH);
-                SystemClock.sleep(VIBRATE_LENGTH + PAUSE_LENGTH);
-            }
-        }
-    }
-    private class Worker implements Runnable {
-        private final Object mLock = new Object();
-        private Looper mLooper;
+	/**
+	 * Repeats the ring, if needed.
+	 * Does nothing if there is no ring in progress or ring is suspended.
+	 * Ignored if invoked outside of startRing()/stopRing() call pair.
+	 */
+	public void continueRing() {
+		if (DBG) log("repeatRing()...");
+		
+		getRingHandler().sendEmptyMessage(RingHandler.MSG_CONTINUE);
+	}
 
-        Worker(String name) {
-            Thread t = new Thread(null, this, name);
-            t.start();
-            synchronized (mLock) {
-                while (mLooper == null) {
-                    try {
-                        mLock.wait();
-                    } catch (InterruptedException ex) {
-                    }
-                }
-            }
-        }
+	/**
+	 * Silences the ring.
+	 * Does nothing if there is no ring in progress.
+	 * Ignored if invoked outside of startRing()/stopRing() call pair. 
+	 * Subsequent invocations ignored, until after resumeRing(). 
+	 */
+	public void suspendRing() {
+		if (DBG) log("suspendRing()...");
+		
+		getRingHandler().sendEmptyMessage(RingHandler.MSG_SUSPEND);
+	}
 
-        public Looper getLooper() {
-            return mLooper;
-        }
+	/**
+	 * Resumes ring after it was silenced.
+	 * 
+	 * Does nothing if there is no ring in progress.
+	 * Ignored if invoked outside of startRing()/stopRing() call pair.
+	 * Subsequent invocations ignored, until after suspendRing().
+	 */
+	public void resumeRing() {
+		if (DBG) log("resumeRing()...");
+		
+		getRingHandler().sendEmptyMessage(RingHandler.MSG_RESUME);
 
-        public void run() {
-            synchronized (mLock) {
-                Looper.prepare();
-                mLooper = Looper.myLooper();
-                mLock.notifyAll();
-            }
-            Looper.loop();
-        }
+	}
 
-        public void quit() {
-            mLooper.quit();
-        }
-    }
+	String getStateDescription() {
+		return getRingHandler().getStateDescription();
+	}
+	/**
+	 * Instantiates a RingHandler, if needed.
+	 * RingHandler is running in a separate thread and serves ring start and
+	 * stop requests.
+	 * RingHandler's thread is reused for all calls.
+	 * @return RingHandler 
+	 */
+	private RingHandler getRingHandler() {
+		synchronized(Ringer.this) {
+			if (null == mRingHandler) {
+				if (DBG) log("Allocating new ring handler");
+				Thread thread = new Thread("ringer") {
+					@Override
+					public void run() {
+						Looper.prepare();
+						mRingHandler = new RingHandler(Looper.myLooper());
+						synchronized(Thread.currentThread()) {
+							Thread.currentThread().notifyAll();
+						}
+						Looper.loop();
+					}
+				};
+				thread.start();
+				synchronized(thread) {
+					while (null == mRingHandler) {
+						try {
+							thread.wait();
+						} catch (InterruptedException ex) {
+						}
+					}
+				}
+			}
+		}
 
-    /**
-     * Sets the ringtone uri in preparation for ringtone creation
-     * in makeLooper().  This uri is defaulted to the phone-wide
-     * default ringtone.
-     */
-    void setCustomRingtoneUri (Uri uri) {
-        if (uri != null) {
-            mCustomRingtoneUri = uri;
-        }
-    }
+		return mRingHandler;
+	}
 
-    private void makeLooper() {
-        if (mRingThread == null) {
-            mRingThread = new Worker("ringer");
-            mRingHandler = new Handler(mRingThread.getLooper()) {
-                @Override
-                public void handleMessage(Message msg) {
-                    Ringtone r = null;
-                    switch (msg.what) {
-                        case PLAY_RING_ONCE:
-                            if (DBG) log("mRingHandler: PLAY_RING_ONCE...");
-                            if (mRingtone == null && !hasMessages(STOP_RING)) {
-                                // create the ringtone with the uri
-                                if (DBG) log("creating ringtone: " + mCustomRingtoneUri);
-                                r = RingtoneManager.getRingtone(mContext, mCustomRingtoneUri);
-                                synchronized (Ringer.this) {
-                                    if (!hasMessages(STOP_RING)) {
-                                        mRingtone = r;
-                                    }
-                                }
-                            }
-                            r = mRingtone;
-                            if (r != null && !hasMessages(STOP_RING) && !r.isPlaying()) {
-                                PhoneUtils.setAudioMode();
-                                r.play();
-                                synchronized (Ringer.this) {
-                                    if (mFirstRingStartTime < 0) {
-                                        mFirstRingStartTime = SystemClock.elapsedRealtime();
-                                    }
-                                }
-                            }
-                            break;
-                        case STOP_RING:
-                            if (DBG) log("mRingHandler: STOP_RING...");
-                            r = (Ringtone) msg.obj;
-                            if (r != null) {
-                                r.stop();
-                            } else {
-                                if (DBG) log("- STOP_RING with null ringtone!  msg = " + msg);
-                            }
-                            getLooper().quit();
-                            break;
-                    }
-                }
-            };
-        }
-    }
+	private class StartRingMsg {
+		public Uri ringtoneUri;
+		public long timeStamp;
+		public int attentionLight;
+		public boolean playsRingtone;
+		public boolean vibrates;
 
-    private static void log(String msg) {
-        Log.d(LOG_TAG, msg);
-    }
+		StartRingMsg(Uri uri, int attnLight, boolean ring, boolean vibe) {
+			ringtoneUri = uri;
+			attentionLight = attnLight;
+			playsRingtone = ring;
+			vibrates = vibe;
+			timeStamp = SystemClock.elapsedRealtime();
+		}
+	}
+
+	private class RingHandler extends Handler {
+		private static final String LOG_TAG = "Ringer/RingHandler";
+		
+		/**
+		 * @category Message constants
+		 */
+		/** Start to serve a call, obj is a StartRingMsg */
+		private static final int MSG_START = 0;
+		/** Vibe once, internal */
+		private static final int MSG_VIBE = 1;
+		/** Ring once, if needed, internal, obj can be a new ring Uri or null */
+		private static final int MSG_RING = 2;
+		/** Repeat ring, if needed */
+		private static final int MSG_CONTINUE = 3;
+		/** Silence ring */
+		private static final int MSG_SUSPEND = 4;
+		/** Resumes silenced ring, if needed */
+		private static final int MSG_RESUME = 5;
+		/** Stop serving a call */
+		private static final int MSG_STOP = 6;
+		/** Cleanup working thread since it was unused for too long, internal */
+		private static final int MSG_CLEANUP = 8;
+		
+
+		/**
+		 *  @category Timings
+		 */
+		/** How long to vibrate, ms */
+		private static final int VIBRATE_LENGTH = 1000;
+		/** How long to wait between vibrates, ms */
+		private static final int PAUSE_LENGTH = 1000;
+		/** Unused cleanup delay, ms */
+		private static final int CLEANUP_DELAY = 5000;
+
+		/**
+		 * @category Attention light color codes
+		 */
+		private static final int ATTN_LIGHT_NONE = 0x00000000;
+		private static final int ATTN_LIGHT_INCOMING = 0x00ffffff;
+		private static final int ATTN_LIGHT_INCOMING_BT = 0x000000ff;
+
+		/**
+		 * @category States
+		 */
+		/** Ready for a call to serve */
+		private static final int STATE_IDLE = 0;
+		/** Actually serving a call */
+		private static final int STATE_RINGING = 1;
+		/** Ringing is (temporarily) suspended */
+		private static final int STATE_SUSPENDED = 2;
+		/** Current state */
+		private int mState = STATE_IDLE;
+
+		private Vibrator mVibrator = new Vibrator();
+		private long mFirstRingEventTime = -1; // when ring is requested
+		private long mFirstRingStartTime = -1; // when ring is actually started
+		// Data for periodics and resumes
+		private Ringtone mRingtone = null;
+		private boolean mVibes = false;
+		private int mAttentionLight = 0x00000000; 
+
+		public RingHandler(Looper looper) {
+			super(looper);
+		}
+
+		String getStateDescription() {
+			String theState = "";
+
+			switch (mState) {
+			case STATE_IDLE: theState = "STATE_IDLE"; break;
+			case STATE_RINGING: theState = "STATE_RINGING"; break;
+			case STATE_SUSPENDED: theState = "STATE_SUSPENDED"; break;
+			}
+
+			return theState;
+		}
+		
+		@Override
+		public void handleMessage(Message msg) {
+			switch (msg.what) {
+			case MSG_START:
+				if (DBG) Log.d(LOG_TAG, "MSG_START, state: " + mState);
+
+				if (STATE_IDLE != mState) return; 
+				if (DBG) Log.d(LOG_TAG, "MSG_START: Ringing for the first time");
+				StartRingMsg request = (StartRingMsg)msg.obj;
+
+				// We are in use !!!
+				removeMessages(MSG_CLEANUP);
+				
+				mVibes = request.vibrates;
+				mAttentionLight = request.attentionLight;
+				mState = STATE_RINGING;
+				
+				if (mVibes) {
+					if (DBG) Log.d(LOG_TAG, "MSG_START: Requested to vibe");
+					// Engage vibration
+					sendEmptyMessage(MSG_VIBE);
+				}
+
+				if (request.playsRingtone && null != request.ringtoneUri) {
+					if (DBG) Log.d(LOG_TAG, "MSG_START: Requested to ring");
+					// Engage ring
+					sendMessage(obtainMessage(MSG_RING, request.ringtoneUri));
+					mFirstRingEventTime = request.timeStamp;
+				}
+
+				try {
+					if (DBG) Log.d(LOG_TAG, "MSG_START: Lighting up");
+					mPowerManager.setAttentionLight(true, mAttentionLight);
+				} catch (RemoteException ex) {
+					// the other end of this binder call is in the system process.
+				}
+				break;
+			case MSG_CONTINUE:
+				if (DBG) Log.d(LOG_TAG, "MSG_CONTINUE, state: " + mState);
+				if (STATE_RINGING != mState) return;
+				
+				// Use mFirstRingEventTime as implicit indication
+				// that ring play was requested
+				if (mFirstRingStartTime > 0 && mFirstRingEventTime > 0) {
+					// For repeat rings, figure out by how much to delay
+					// the ring so that it happens the correct amount of
+					// time after the previous ring
+					if (null != mRingtone && !mRingtone.isPlaying()) {
+						if (DBG) Log.d(LOG_TAG, "MSG_CONTINUE: Replay");
+						sendEmptyMessageDelayed(MSG_RING,
+								mFirstRingStartTime - mFirstRingEventTime);
+					}
+				} else {
+					// We've gotten two ring events so far, but the ring
+					// still hasn't started. Reset the event time to the
+					// time of this event to maintain correct spacing.
+					if (DBG) Log.d(LOG_TAG, "MSG_CONTINUE: Rebase ring");
+					mFirstRingEventTime = SystemClock.elapsedRealtime();
+				}
+				break;
+			case MSG_VIBE:
+				if (DBG) Log.d(LOG_TAG, "MSG_VIBE, state: " + mState);
+				if (STATE_RINGING != mState) return;
+				
+				mVibrator.vibrate(VIBRATE_LENGTH);
+				this.sendEmptyMessageDelayed(MSG_VIBE,
+						VIBRATE_LENGTH + PAUSE_LENGTH);
+				break;
+			case MSG_RING:
+				if (DBG) Log.d(LOG_TAG, "MSG_RING, state: " + mState);
+
+				// Remember new ringtone regardless of the state,
+				// as we will be unable to obtain it later otherwise.
+				if (null != msg.obj) {
+					// Requested to instantiate (switch to) a ringtone
+					if (null != mRingtone && mRingtone.isPlaying()) {
+						mRingtone.stop();
+					}
+					// Assuming that accessing a member is an atomic operation, 
+					// we should be safe here with possible updates of context
+					// in main thread
+					Context ctx = mContext;
+					if (DBG) Log.d(LOG_TAG, "MSG_RING: Resolving ringtone");
+					mRingtone = RingtoneManager.getRingtone(ctx, (Uri)msg.obj);
+				}
+				
+				if (STATE_RINGING != mState) return;
+
+				// Allow ring to play to its end before following replay request
+				if (null != mRingtone && !mRingtone.isPlaying()) {
+					if (DBG) Log.d(LOG_TAG, "MSG_RING: Playing ringtone");
+					PhoneUtils.setAudioMode();
+					mRingtone.play();
+					if (mFirstRingStartTime < 0) {
+						mFirstRingStartTime = SystemClock.elapsedRealtime();
+					}
+				}
+				break;
+			case MSG_SUSPEND:
+				if (DBG) Log.d(LOG_TAG, "MSG_SUSPEND, state: " + mState);
+				if (STATE_RINGING != mState) return;
+
+				mState = STATE_SUSPENDED;
+				mFirstRingEventTime = -1;
+				mFirstRingStartTime = -1;
+				if (mVibes) {
+					if (DBG) Log.d(LOG_TAG, "MSG_SUSPEND: Stop vibe");
+					mVibrator.cancel();
+				}
+				if (null != mRingtone && mRingtone.isPlaying()) {
+					if (DBG) Log.d(LOG_TAG, "MSG_SUSPEND: Stop ring");
+					mRingtone.stop();
+				}
+				try {
+					if (DBG) Log.d(LOG_TAG, "MSG_SUSPEND: Turn off the light");
+					mPowerManager.setAttentionLight(false, ATTN_LIGHT_NONE);
+				} catch (RemoteException ex) {
+					// the other end of this binder call is in the system process.
+				}
+				break;
+			case MSG_RESUME:
+				if (DBG) Log.d(LOG_TAG, "MSG_RESUME, state: " + mState);
+				if (STATE_SUSPENDED != mState) return;
+				
+				mState = STATE_RINGING;
+				if (mVibes) {
+					if (DBG) Log.d(LOG_TAG, "MSG_RESUME: Resume vibe");
+					// Engage vibration
+					sendEmptyMessage(MSG_VIBE);
+				}
+				if (null != mRingtone) {
+					if (DBG) Log.d(LOG_TAG, "MSG_RESUME: Resume ring");
+					mFirstRingEventTime = SystemClock.elapsedRealtime();
+					sendEmptyMessage(MSG_RING);
+				}
+				try {
+					if (DBG) Log.d(LOG_TAG, "MSG_SUSPEND: Light up");
+					mPowerManager.setAttentionLight(true, mAttentionLight);
+				} catch (RemoteException ex) {
+					// the other end of this binder call is in the system process.
+				}
+				break;
+			case MSG_STOP:
+				if (DBG) Log.d(LOG_TAG, "STOP_RING, state: " + mState);
+
+				// Ready for the next call
+				mState = STATE_IDLE;
+				mFirstRingEventTime = -1;
+				mFirstRingStartTime = -1;
+				mVibrator.cancel();
+				if (null != mRingtone) {
+					PhoneUtils.setAudioMode();
+					mRingtone.stop();
+					mRingtone = null;
+				}
+				try {
+					mPowerManager.setAttentionLight(false, ATTN_LIGHT_NONE);
+				} catch (RemoteException ex) {
+					// the other end of this binder call is in the system process.
+				}
+
+				sendEmptyMessageDelayed(MSG_CLEANUP, CLEANUP_DELAY);
+				break;
+			case MSG_CLEANUP:
+				synchronized(Ringer.this) {
+					mRingHandler = null;
+				}
+				getLooper().quit();
+				if (DBG) Log.d(LOG_TAG, "MSG_CLEANUP: ring handler deallocated");
+				break;
+			}
+		}
+	}
+
+	private static void log(String msg) {
+		Log.d(LOG_TAG, msg);
+	}
 }

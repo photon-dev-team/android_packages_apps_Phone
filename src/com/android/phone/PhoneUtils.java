@@ -2500,8 +2500,7 @@ public class PhoneUtils {
         // Watch out: the isRinging() call below does NOT tell us anything
         // about the state of the telephony layer; it merely tells us whether
         // the Ringer manager is currently playing the ringtone.
-        boolean ringing = app.getRinger().isRinging();
-        Log.d(LOG_TAG, "  - Ringer state: " + ringing);
+        Log.d(LOG_TAG, "  - Ringer state: " + app.getRinger().getStateDescription());
     }
 
     private static void log(String msg) {

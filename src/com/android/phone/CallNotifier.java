@@ -32,6 +32,7 @@ import android.app.ActivityManagerNative;
 import android.content.Context;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
+import android.net.Uri;
 import android.os.AsyncResult;
 import android.os.Handler;
 import android.os.Message;
@@ -151,7 +152,6 @@ public class CallNotifier extends Handler
     private Ringer mRinger;
     private BluetoothHandsfree mBluetoothHandsfree;
     private CallLogAsync mCallLog;
-    private boolean mSilentRingerRequested;
 
     // ToneGenerator instance for playing SignalInfo tones
     private ToneGenerator mSignalInfoToneGenerator;
@@ -233,7 +233,6 @@ public class CallNotifier extends Handler
             case PHONE_NEW_RINGING_CONNECTION:
                 log("RINGING... (new)");
                 onNewRingingConnection((AsyncResult) msg.obj);
-                mSilentRingerRequested = false;
                 break;
 
             case PHONE_INCOMING_RING:
@@ -242,10 +241,9 @@ public class CallNotifier extends Handler
                 if (msg.obj != null && ((AsyncResult) msg.obj).result != null) {
                     PhoneBase pb =  (PhoneBase)((AsyncResult)msg.obj).result;
 
-                    if ((pb.getState() == Phone.State.RINGING)
-                            && (mSilentRingerRequested == false)) {
+                    if ((pb.getState() == Phone.State.RINGING)) {
                         if (DBG) log("RINGING... (PHONE_INCOMING_RING event)");
-                        mRinger.ring();
+                        mRinger.continueRing();
                     } else {
                         if (DBG) log("RING before NEW_RING, skipping");
                     }
@@ -275,7 +273,7 @@ public class CallNotifier extends Handler
                 // like if the query had completed normally.  (But we're
                 // going to get the default ringtone, since we never got
                 // the chance to call Ringer.setCustomRingtoneUri()).
-                onCustomRingQueryComplete();
+                onCustomRingQueryComplete(null);
                 break;
 
             case PHONE_MWI_CHANGED:
@@ -575,9 +573,6 @@ public class CallNotifier extends Handler
             }
         }
         if (shouldStartQuery) {
-            // create a custom ringer using the default ringer first
-            mRinger.setCustomRingtoneUri(Settings.System.DEFAULT_RINGTONE_URI);
-
             // query the callerinfo to try to get the ringer.
             PhoneUtils.CallerInfoToken cit = PhoneUtils.startGetCallerInfo(
                     mApplication, c, this, this);
@@ -602,7 +597,7 @@ public class CallNotifier extends Handler
 
             // In this case, just log the request and ring.
             if (VDBG) log("RINGING... (request to ring arrived while query is running)");
-            mRinger.ring();
+            mRinger.startRing(null);
 
             // in this case, just fall through like before, and call
             // showIncomingCall().
@@ -628,7 +623,7 @@ public class CallNotifier extends Handler
      * (We still tell the Ringer to start, but it's going to use the
      * default ringtone.)
      */
-    private void onCustomRingQueryComplete() {
+    private void onCustomRingQueryComplete(Uri ringtoneUri) {
         boolean isQueryExecutionTimeExpired = false;
         synchronized (mCallerInfoQueryStateGuard) {
             if (mCallerInfoQueryState == CALLERINFO_QUERYING) {
@@ -664,7 +659,7 @@ public class CallNotifier extends Handler
 
         // Ring, either with the queried ringtone or default one.
         if (VDBG) log("RINGING... (onCustomRingQueryComplete)");
-        mRinger.ring();
+        mRinger.startRing(ringtoneUri);
 
         // ...and display the incoming call to the user:
         if (DBG) log("- showing incoming call (custom ring query complete)...");
@@ -973,14 +968,8 @@ public class CallNotifier extends Handler
                     return;
                 }
 
-                // set the ringtone uri to prepare for the ring.
-                if (ci.contactRingtoneUri != null) {
-                    if (DBG) log("custom ringtone found, setting up ringer.");
-                    Ringer r = ((CallNotifier) cookie).mRinger;
-                    r.setCustomRingtoneUri(ci.contactRingtoneUri);
-                }
                 // ring, and other post-ring actions.
-                onCustomRingQueryComplete();
+                onCustomRingQueryComplete(ci.contactRingtoneUri);
             }
         }
     }
@@ -1323,20 +1312,12 @@ public class CallNotifier extends Handler
     }
 
     /**
-     * Indicates whether or not this ringer is ringing.
-     */
-    boolean isRinging() {
-        return mRinger.isRinging();
-    }
-
-    /**
      * Stops the current ring, and tells the notifier that future
      * ring requests should be ignored.
      */
     void silenceRinger() {
-        mSilentRingerRequested = true;
         if (DBG) log("stopRing()... (silenceRinger)");
-        mRinger.stopRing();
+        mRinger.suspendRing();
     }
 
     /**
@@ -1347,7 +1328,6 @@ public class CallNotifier extends Handler
      */
     /* package */ void restartRinger() {
         if (DBG) log("restartRinger()...");
-        if (isRinging()) return;  // Already ringing; no need to restart.
 
         final Call ringingCall = mCM.getFirstActiveRingingCall();
         // Don't check ringingCall.isRinging() here, since that'll be true
@@ -1355,7 +1335,7 @@ public class CallNotifier extends Handler
         // regular INCOMING calls.
         if (DBG) log("- ringingCall state: " + ringingCall.getState());
         if (ringingCall.getState() == Call.State.INCOMING) {
-            mRinger.ring();
+            mRinger.resumeRing();
         }
     }
 
