@@ -410,8 +410,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      * @see silenceRinger
      */
     private void silenceRingerInternal() {
-        if ((mPhone.getState() == Phone.State.RINGING)
-            && mApp.notifier.isRinging()) {
+        if ((mPhone.getState() == Phone.State.RINGING)) {
             // Ringer is actually playing, so silence it.
             if (DBG) log("silenceRingerInternal: silencing...");
             mApp.notifier.silenceRinger();

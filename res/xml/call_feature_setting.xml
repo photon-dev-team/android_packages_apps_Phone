@@ -80,6 +80,12 @@
         android:persistent="false" />
 
     <CheckBoxPreference
+        android:key="button_vibrate_outgoing"
+        android:title="@string/vibrate_outgoing"
+        android:persistent="false"
+        android:summary="@string/vibrate_outgoing_sum" />
+
+    <CheckBoxPreference
         android:key="button_auto_retry_key"
         android:title="@string/auto_retry_mode_title"
         android:persistent="false"

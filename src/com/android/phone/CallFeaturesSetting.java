@@ -162,6 +162,8 @@ public class CallFeaturesSetting extends PreferenceActivity
     private static final String SIP_SETTINGS_CATEGORY_KEY =
             "sip_settings_category_key";
 
+    private static final String BUTTON_VIBRATE_OUTGOING = "button_vibrate_outgoing";
+
     private Intent mContactListIntent;
 
     /** Event for Async voicemail change call */
@@ -216,6 +218,7 @@ public class CallFeaturesSetting extends PreferenceActivity
 
     private CheckBoxPreference mButtonAutoRetry;
     private CheckBoxPreference mButtonHAC;
+    private CheckBoxPreference mButtonVibrateOutgoing;
     private ListPreference mButtonDTMF;
     private ListPreference mButtonTTY;
     private ListPreference mButtonSipCallOptions;
@@ -447,6 +450,11 @@ public class CallFeaturesSetting extends PreferenceActivity
         } else if (preference == mVoicemailSettings && preference.getIntent() != null) {
             if (DBG) log("Invoking cfg intent " + preference.getIntent().getPackage());
             this.startActivityForResult(preference.getIntent(), VOICEMAIL_PROVIDER_CFG_ID);
+            return true;
+        } else if (preference == mButtonVibrateOutgoing) {
+            Settings.System.putInt(getContentResolver(),
+                    Constants.PREF_VIBRATE_OUTGOING,
+                    mButtonVibrateOutgoing.isChecked() ? 1 : 0);
             return true;
         }
         return false;
@@ -1382,6 +1390,11 @@ public class CallFeaturesSetting extends PreferenceActivity
             mSubMenuVoicemailSettings.setDialogTitle(R.string.voicemail_settings_number_label);
         }
 
+        mButtonVibrateOutgoing = (CheckBoxPreference) findPreference(BUTTON_VIBRATE_OUTGOING);
+        if (null != mButtonVibrateOutgoing) {
+            mButtonVibrateOutgoing.setOnPreferenceChangeListener(this);
+        }
+
         mButtonDTMF = (ListPreference) findPreference(BUTTON_DTMF_KEY);
         mButtonAutoRetry = (CheckBoxPreference) findPreference(BUTTON_RETRY_KEY);
         mButtonHAC = (CheckBoxPreference) findPreference(BUTTON_HAC_KEY);
@@ -1557,6 +1570,12 @@ public class CallFeaturesSetting extends PreferenceActivity
                     Phone.TTY_MODE_OFF);
             mButtonTTY.setValue(Integer.toString(settingsTtyMode));
             updatePreferredTtyModeSummary(settingsTtyMode);
+        }
+
+        if (null != mButtonVibrateOutgoing) {
+            int vibrate = Settings.System.getInt(getContentResolver(),
+                    Constants.PREF_VIBRATE_OUTGOING, 0);
+            mButtonVibrateOutgoing.setChecked(0 != vibrate);
         }
     }
 

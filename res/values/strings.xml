@@ -875,6 +875,11 @@
     <!-- Progress message displayed on "SIM Unlock" screen -->
     <string name="sim_unlock_status_text">Authenticating PIN\u2026</string>
 
+    <!-- Call settings screen, Vibrate outgoing button title -->
+    <string name="vibrate_outgoing">Vibrate on answer</string>
+    <!-- Call settings screen, Vibrate outgoing btton summary -->
+    <string name="vibrate_outgoing_sum">Vibrate when a call is answered</string>
+
     <!-- Call settings screen, Set voicemail dialog title -->
     <string name="voicemail_settings_number_label">Voicemail number</string>
 

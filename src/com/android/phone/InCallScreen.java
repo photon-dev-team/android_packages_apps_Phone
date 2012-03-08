@@ -3424,10 +3424,9 @@ public class InCallScreen extends Activity
     private void internalSilenceRinger() {
         if (DBG) log("internalSilenceRinger()...");
         final CallNotifier notifier = mApp.notifier;
-        if (notifier.isRinging()) {
-            // ringer is actually playing, so silence it.
-            notifier.silenceRinger();
-        }
+        // ringer is actually playing, so silence it.
+        notifier.silenceRinger();
+
     }
 
     /**

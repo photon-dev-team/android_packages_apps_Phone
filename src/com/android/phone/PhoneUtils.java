@@ -403,6 +403,24 @@ public class PhoneUtils {
         return hangup(background);
     }
 
+    static Call getCurrentCall(Phone phone) {
+        Call ringing = phone.getRingingCall();
+        Call fg = phone.getForegroundCall();
+        Call bg = phone.getBackgroundCall();
+        return (!ringing.isIdle()) ? ringing : ((!fg.isIdle()) ? fg : ((!bg.isIdle()) ? bg : fg));
+    }
+
+    static Connection getConnection(Phone phone, Call call) {
+        if (call == null) return null;
+        Connection conn = null;
+        if (phone.getPhoneName().equals("CDMA")) {
+            conn = call.getLatestConnection();
+        } else {
+            conn = call.getEarliestConnection();
+        }
+        return conn;
+    }
+
     /**
      * Used in CDMA phones to end the complete Call session
      * @param phone the Phone object.
@@ -2500,8 +2518,7 @@ public class PhoneUtils {
         // Watch out: the isRinging() call below does NOT tell us anything
         // about the state of the telephony layer; it merely tells us whether
         // the Ringer manager is currently playing the ringtone.
-        boolean ringing = app.getRinger().isRinging();
-        Log.d(LOG_TAG, "  - Ringer state: " + ringing);
+        Log.d(LOG_TAG, "  - Ringer state: " + app.getRinger().getStateDescription());
     }
 
     private static void log(String msg) {
