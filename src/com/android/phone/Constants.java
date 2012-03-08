@@ -139,4 +139,12 @@ public class Constants {
     // (Currently they're all over the place: InCallScreen,
     // OutgoingCallBroadcaster, OtaUtils, etc.)
     //
+
+    //
+    // Preferences
+    //
+    // Vibrate on answering outgoing call
+    public static final String PREF_VIBRATE_OUTGOING = "com.android.phone" +
+            ".VibrateOutgoing";
+
 }
