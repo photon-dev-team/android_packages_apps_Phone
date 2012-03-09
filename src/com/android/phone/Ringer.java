@@ -108,8 +108,10 @@ public class Ringer {
 				(0 != audioMgr.getStreamVolume(AudioManager.STREAM_RING)),
 				(audioMgr.shouldVibrate(AudioManager.VIBRATE_TYPE_RINGER)));
 
-		getRingHandler().sendMessage(
-				getRingHandler().obtainMessage(RingHandler.MSG_START, msg));
+		synchronized(this) {
+		    getRingHandler().sendMessage(
+		            getRingHandler().obtainMessage(RingHandler.MSG_START, msg));
+		}
 	}
 
 	/**
@@ -119,9 +121,11 @@ public class Ringer {
 	public void stopRing() {
 		if (DBG) log("stopRing()...");
 
-		getRingHandler().removeCallbacksAndMessages(null);
-		getRingHandler().sendMessageAtFrontOfQueue(
-				getRingHandler().obtainMessage(RingHandler.MSG_STOP));
+		synchronized(this) {
+		    getRingHandler().removeCallbacksAndMessages(null);
+		    getRingHandler().sendMessageAtFrontOfQueue(
+		            getRingHandler().obtainMessage(RingHandler.MSG_STOP));
+		}
 	}
 
 	/**
@@ -132,7 +136,9 @@ public class Ringer {
 	public void continueRing() {
 		if (DBG) log("repeatRing()...");
 		
-		getRingHandler().sendEmptyMessage(RingHandler.MSG_CONTINUE);
+		synchronized(this) {
+		    getRingHandler().sendEmptyMessage(RingHandler.MSG_CONTINUE);
+		}
 	}
 
 	/**
@@ -144,7 +150,9 @@ public class Ringer {
 	public void suspendRing() {
 		if (DBG) log("suspendRing()...");
 		
-		getRingHandler().sendEmptyMessage(RingHandler.MSG_SUSPEND);
+		synchronized(this) {
+		    getRingHandler().sendEmptyMessage(RingHandler.MSG_SUSPEND);
+		}
 	}
 
 	/**
@@ -157,12 +165,15 @@ public class Ringer {
 	public void resumeRing() {
 		if (DBG) log("resumeRing()...");
 		
-		getRingHandler().sendEmptyMessage(RingHandler.MSG_RESUME);
-
+		synchronized(this) {
+		    getRingHandler().sendEmptyMessage(RingHandler.MSG_RESUME);
+		}
 	}
 
 	String getStateDescription() {
-		return getRingHandler().getStateDescription();
+	    synchronized(this) {
+	        return getRingHandler().getStateDescription();
+	    }
 	}
 	/**
 	 * Instantiates a RingHandler, if needed.
@@ -172,18 +183,34 @@ public class Ringer {
 	 * @return RingHandler 
 	 */
 	private RingHandler getRingHandler() {
-		synchronized(Ringer.this) {
+		synchronized(this) {
 			if (null == mRingHandler) {
 				if (DBG) log("Allocating new ring handler");
 				Thread thread = new Thread("ringer") {
 					@Override
 					public void run() {
 						Looper.prepare();
-						mRingHandler = new RingHandler(Looper.myLooper());
-						synchronized(Thread.currentThread()) {
-							Thread.currentThread().notifyAll();
+                        synchronized(Thread.currentThread()) {
+                            mRingHandler = new RingHandler(Looper.myLooper());
+                            Thread.currentThread().notifyAll();
 						}
-						Looper.loop();
+						while (true) {
+						    if (DBG) Log.d("Ringer/RingHandler",
+						            "Entering serving loop");
+						    Looper.loop();
+						    synchronized(this) {
+						        // If so happens that there is another ring to
+						        // serve, don't die too young.
+						        // Ignore other messages as they are not going
+						        // to be handled anyway once we have reached 
+						        // this stage.
+						        if (!mRingHandler.hasMessages(
+						                RingHandler.MSG_START)) {
+						            mRingHandler = null;
+						            break;
+						        }
+						    }
+						}
 					}
 				};
 				thread.start();
@@ -437,7 +464,7 @@ public class Ringer {
 				}
 				break;
 			case MSG_STOP:
-				if (DBG) Log.d(LOG_TAG, "STOP_RING, state: " + mState);
+				if (DBG) Log.d(LOG_TAG, "MSG_STOP, state: " + mState);
 
 				// Ready for the next call
 				mState = STATE_IDLE;
@@ -458,11 +485,8 @@ public class Ringer {
 				sendEmptyMessageDelayed(MSG_CLEANUP, CLEANUP_DELAY);
 				break;
 			case MSG_CLEANUP:
-				synchronized(Ringer.this) {
-					mRingHandler = null;
-				}
 				getLooper().quit();
-				if (DBG) Log.d(LOG_TAG, "MSG_CLEANUP: ring handler deallocated");
+				if (DBG) Log.d(LOG_TAG, "MSG_CLEANUP: Exiting serving loop");
 				break;
 			}
 		}
