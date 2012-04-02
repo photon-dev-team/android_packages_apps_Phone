@@ -458,8 +458,6 @@
     <string name="sim_unlock_dismiss_text" msgid="8292343981739813597">"無効"</string>
     <string name="sim_unlock_unlock_text" msgid="6328406783399256930">"ロック解除"</string>
     <string name="sim_unlock_status_text" msgid="1919609683384607179">"PINを認証中..."</string>
-    <string name="vibrate_outgoing">応答時に振動</string>
-    <string name="vibrate_outgoing_sum">相手が呼び出しに応答した時にバイブレーションする</string>
     <string name="voicemail_settings_number_label" msgid="8524164258691887790">"ボイスメールの番号"</string>
     <string name="card_title_dialing" msgid="5769417478498348054">"発信中"</string>
     <string name="card_title_redialing" msgid="4831412164303596395">"再試行中"</string>
@@ -715,4 +713,28 @@
     <string name="description_target_answer" msgid="7205604197797472471">"電話に出る"</string>
     <string name="description_target_send_sms" msgid="2098326025587950144">"SMSを送信"</string>
     <string name="description_target_decline" msgid="4789834364389731957">"着信拒否"</string>
+
+    <!-- CM Extra entries -->
+    <!-- Mobile network settings screen, setting check box name -->
+    <string name="national_roaming">国内データローミング</string>
+    <!-- Mobile network settings screen, setting summary text when check box is selected -->
+    <string name="national_roaming_enable">国内ローミング中にデータサービスに接続する</string>
+    <!-- Mobile network settings screen, setting summary text when check box is clear -->
+    <string name="national_roaming_disable">国内ローミング中にデータサービスに接続する</string>
+
+    <!-- Dialer UI Settings -->
+    <string name="dialer_ui_settings_title">ダイヤルパッドの設定</string>
+    <string name="dialer_ui_settings_summary">ダイヤルパッドの設定</string>
+
+    <string name="phone_number_label">自分の電話番号</string>
+    <string name="phone_number_summary">この端末に電話番号をセットする</string>
+
+    <string name="voicemail_notification_vibrate_when_title" msgid="8361970092063604886">"バイブレーション"</string>
+    <string name="voicemail_notification_vibarte_when_dialog_title" msgid="5739583146522136440">"バイブレーション"</string>
+  <string-array name="voicemail_notification_vibrate_when_entries">
+    <item msgid="468237575962916558">"常に使用"</item>
+    <item msgid="1595097872875714252">"マナーモード時のみ"</item>
+    <item msgid="1458182414036878616">"使用しない"</item>
+  </string-array>
 </resources>
+

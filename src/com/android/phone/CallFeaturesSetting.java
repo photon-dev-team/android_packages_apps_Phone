@@ -142,6 +142,8 @@ public class CallFeaturesSetting extends PreferenceActivity
     private static final String BUTTON_VOICEMAIL_KEY = "button_voicemail_key";
     private static final String BUTTON_VOICEMAIL_PROVIDER_KEY = "button_voicemail_provider_key";
     private static final String BUTTON_VOICEMAIL_SETTING_KEY = "button_voicemail_setting_key";
+    /* package */ static final String BUTTON_VOICEMAIL_NOTIFICATION_VIBRATE_WHEN_KEY =
+            "button_voicemail_notification_vibrate_when_key";
     private static final String BUTTON_FDN_KEY   = "button_fdn_key";
     private static final String BUTTON_RESPOND_VIA_SMS_KEY   = "button_respond_via_sms_key";
 
@@ -161,8 +163,6 @@ public class CallFeaturesSetting extends PreferenceActivity
             "sip_call_options_wifi_only_key";
     private static final String SIP_SETTINGS_CATEGORY_KEY =
             "sip_settings_category_key";
-
-    private static final String BUTTON_VIBRATE_OUTGOING = "button_vibrate_outgoing";
 
     private Intent mContactListIntent;
 
@@ -218,12 +218,12 @@ public class CallFeaturesSetting extends PreferenceActivity
 
     private CheckBoxPreference mButtonAutoRetry;
     private CheckBoxPreference mButtonHAC;
-    private CheckBoxPreference mButtonVibrateOutgoing;
     private ListPreference mButtonDTMF;
     private ListPreference mButtonTTY;
     private ListPreference mButtonSipCallOptions;
     private ListPreference mVoicemailProviders;
     private PreferenceScreen mVoicemailSettings;
+    private ListPreference mVoicemailNotificationVibrateWhen;
     private SipSharedPreferences mSipSharedPreferences;
 
     private class VoiceMailProvider {
@@ -451,11 +451,6 @@ public class CallFeaturesSetting extends PreferenceActivity
             if (DBG) log("Invoking cfg intent " + preference.getIntent().getPackage());
             this.startActivityForResult(preference.getIntent(), VOICEMAIL_PROVIDER_CFG_ID);
             return true;
-        } else if (preference == mButtonVibrateOutgoing) {
-            Settings.System.putInt(getContentResolver(),
-                    Constants.PREF_VIBRATE_OUTGOING,
-                    mButtonVibrateOutgoing.isChecked() ? 1 : 0);
-            return true;
         }
         return false;
     }
@@ -508,6 +503,10 @@ public class CallFeaturesSetting extends PreferenceActivity
                 mChangingVMorFwdDueToProviderChange = true;
                 saveVoiceMailAndForwardingNumber(newProviderKey, newProviderSettings);
             }
+        } else if (preference == mVoicemailNotificationVibrateWhen) {
+            mVoicemailNotificationVibrateWhen.setValue((String) objValue);
+            mVoicemailNotificationVibrateWhen.setSummary(
+                    mVoicemailNotificationVibrateWhen.getEntry());
         } else if (preference == mButtonSipCallOptions) {
             handleSipCallOptionsChange(objValue);
         }
@@ -1390,11 +1389,6 @@ public class CallFeaturesSetting extends PreferenceActivity
             mSubMenuVoicemailSettings.setDialogTitle(R.string.voicemail_settings_number_label);
         }
 
-        mButtonVibrateOutgoing = (CheckBoxPreference) findPreference(BUTTON_VIBRATE_OUTGOING);
-        if (null != mButtonVibrateOutgoing) {
-            mButtonVibrateOutgoing.setOnPreferenceChangeListener(this);
-        }
-
         mButtonDTMF = (ListPreference) findPreference(BUTTON_DTMF_KEY);
         mButtonAutoRetry = (CheckBoxPreference) findPreference(BUTTON_RETRY_KEY);
         mButtonHAC = (CheckBoxPreference) findPreference(BUTTON_HAC_KEY);
@@ -1403,6 +1397,9 @@ public class CallFeaturesSetting extends PreferenceActivity
         if (mVoicemailProviders != null) {
             mVoicemailProviders.setOnPreferenceChangeListener(this);
             mVoicemailSettings = (PreferenceScreen)findPreference(BUTTON_VOICEMAIL_SETTING_KEY);
+            mVoicemailNotificationVibrateWhen =
+                    (ListPreference) findPreference(BUTTON_VOICEMAIL_NOTIFICATION_VIBRATE_WHEN_KEY);
+            mVoicemailNotificationVibrateWhen.setOnPreferenceChangeListener(this);
 
             initVoiceMailProviders();
         }
@@ -1571,12 +1568,6 @@ public class CallFeaturesSetting extends PreferenceActivity
             mButtonTTY.setValue(Integer.toString(settingsTtyMode));
             updatePreferredTtyModeSummary(settingsTtyMode);
         }
-
-        if (null != mButtonVibrateOutgoing) {
-            int vibrate = Settings.System.getInt(getContentResolver(),
-                    Constants.PREF_VIBRATE_OUTGOING, 0);
-            mButtonVibrateOutgoing.setChecked(0 != vibrate);
-        }
     }
 
     private boolean isAirplaneModeOn() {
@@ -1659,6 +1650,9 @@ public class CallFeaturesSetting extends PreferenceActivity
             mVoicemailSettings.setSummary("");
             mVoicemailSettings.setEnabled(false);
             mVoicemailSettings.setIntent(null);
+
+            mVoicemailNotificationVibrateWhen.setEnabled(false);
+            mVoicemailNotificationVibrateWhen.setSummary("");
         } else {
             final String providerName = provider.name;
             mVoicemailProviders.setSummary(providerName);
@@ -1666,6 +1660,10 @@ public class CallFeaturesSetting extends PreferenceActivity
                     R.string.voicemail_settings_for, providerName));
             mVoicemailSettings.setEnabled(true);
             mVoicemailSettings.setIntent(provider.intent);
+
+            mVoicemailNotificationVibrateWhen.setEnabled(true);
+            mVoicemailNotificationVibrateWhen.setSummary(
+                    mVoicemailNotificationVibrateWhen.getEntry());
         }
     }
 
